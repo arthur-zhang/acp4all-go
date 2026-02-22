@@ -17,9 +17,10 @@ type ClaudeCodeOptions struct {
 	PermissionMode string // "default"|"acceptEdits"|"bypassPermissions"|"dontAsk"|"plan"
 	McpServers     map[string]McpServerConfig
 	SystemPrompt   string
-	Resume         string // optional session ID to resume
-	Executable     string // claude CLI path, defaults to "claude"
-	MaxTurns       int
+	Resume            string // optional session ID to resume
+	Executable        string // claude CLI path, defaults to "claude"
+	MaxTurns          int
+	MaxThinkingTokens int // 0 means not set
 }
 
 type McpServerConfig struct {
@@ -105,7 +106,7 @@ func NewClaudeCodeProcess(opts ClaudeCodeOptions) (*ClaudeCodeProcess, error) {
 
 	maxTurns := opts.MaxTurns
 	if maxTurns <= 0 {
-		maxTurns = 10
+		maxTurns = 200
 	}
 
 	args := []string{
@@ -127,6 +128,10 @@ func NewClaudeCodeProcess(opts ClaudeCodeOptions) (*ClaudeCodeProcess, error) {
 
 	if opts.SystemPrompt != "" {
 		args = append(args, fmt.Sprintf("--system-prompt=%s", opts.SystemPrompt))
+	}
+
+	if opts.MaxThinkingTokens > 0 {
+		args = append(args, fmt.Sprintf("--max-thinking-tokens=%d", opts.MaxThinkingTokens))
 	}
 
 	if len(opts.McpServers) > 0 {

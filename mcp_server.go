@@ -55,18 +55,48 @@ func handleRead(ctx context.Context, conn *acp.AgentSideConnection, sessionID st
 	if filePath == "" {
 		return "file_path is required", true, nil
 	}
+
+	var rawContent string
 	if isInternalPath(filePath) {
-		return handleInternalRead(filePath, input)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return "Reading file failed: " + err.Error(), true, nil
+		}
+		content := string(data)
+		offset, hasOffset := inputInt(input, "offset")
+		limit, hasLimit := inputInt(input, "limit")
+		if hasOffset || hasLimit {
+			lines := strings.Split(content, "\n")
+			start := 0
+			if hasOffset {
+				start = offset - 1
+			}
+			if start < 0 {
+				start = 0
+			}
+			end := len(lines)
+			if hasLimit {
+				end = start + limit
+			}
+			if end > len(lines) {
+				end = len(lines)
+			}
+			content = strings.Join(lines[start:end], "\n")
+		}
+		rawContent = content
+	} else {
+		resp, err := conn.ReadTextFile(ctx, acp.ReadTextFileRequest{
+			SessionId: acp.SessionId(sessionID),
+			Path:      filePath,
+		})
+		if err != nil {
+			return "Reading file failed: " + err.Error(), true, nil
+		}
+		rawContent = resp.Content
 	}
+
 	offset, hasOffset := inputInt(input, "offset")
-	resp, err := conn.ReadTextFile(ctx, acp.ReadTextFileRequest{
-		SessionId: acp.SessionId(sessionID),
-		Path:      filePath,
-	})
-	if err != nil {
-		return "Reading file failed: " + err.Error(), true, nil
-	}
-	result := extractLinesWithByteLimit(resp.Content, MaxFileSize)
+	result := extractLinesWithByteLimit(rawContent, MaxFileSize)
 	var readInfo string
 	if (hasOffset && offset > 1) || result.WasLimited {
 		readInfo = "\n\n<file-read-info>"
@@ -79,35 +109,6 @@ func handleRead(ctx context.Context, conn *acp.AgentSideConnection, sessionID st
 		readInfo += "</file-read-info>"
 	}
 	return result.Content + readInfo + SystemReminder, false, nil
-}
-
-func handleInternalRead(filePath string, input map[string]any) (string, bool, error) {
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return "Reading file failed: " + err.Error(), true, nil
-	}
-	content := string(data)
-	offset, hasOffset := inputInt(input, "offset")
-	limit, hasLimit := inputInt(input, "limit")
-	if hasOffset || hasLimit {
-		lines := strings.Split(content, "\n")
-		start := 0
-		if hasOffset {
-			start = offset - 1
-		}
-		if start < 0 {
-			start = 0
-		}
-		end := len(lines)
-		if hasLimit {
-			end = start + limit
-		}
-		if end > len(lines) {
-			end = len(lines)
-		}
-		content = strings.Join(lines[start:end], "\n")
-	}
-	return content, false, nil
 }
 
 func handleWrite(ctx context.Context, conn *acp.AgentSideConnection, sessionID string, input map[string]any) (string, bool, error) {

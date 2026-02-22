@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -9,6 +10,13 @@ import (
 )
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "Unhandled panic: %v\n", r)
+			os.Exit(1)
+		}
+	}()
+
 	// Load managed settings and apply environment variables
 	if settings := loadManagedSettings(); settings != nil {
 		applyEnvironmentSettings(settings)

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -135,12 +136,36 @@ func (a *ClaudeAcpAgent) NewSession(ctx context.Context, params acp.NewSessionRe
 		permissionMode = "default"
 	}
 
+	var maxThinkingTokens int
+	if v := os.Getenv("MAX_THINKING_TOKENS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			maxThinkingTokens = n
+		}
+	}
+
+	executable := os.Getenv("CLAUDE_CODE_EXECUTABLE")
+
+	// Extract system prompt from _meta if provided
+	var systemPrompt string
+	if params.Meta != nil {
+		if meta, ok := params.Meta.(map[string]any); ok {
+			if sp, ok := meta["systemPrompt"]; ok {
+				if s, ok := sp.(string); ok {
+					systemPrompt = s
+				}
+			}
+		}
+	}
+
 	proc, err := NewClaudeCodeProcess(ClaudeCodeOptions{
-		Cwd:            params.Cwd,
-		SessionID:      sessionID,
-		PermissionMode: permissionMode,
-		MaxTurns:       200,
-		McpServers:     mapMcpServers(params.McpServers),
+		Cwd:               params.Cwd,
+		SessionID:         sessionID,
+		PermissionMode:    permissionMode,
+		MaxTurns:          200,
+		MaxThinkingTokens: maxThinkingTokens,
+		Executable:        executable,
+		SystemPrompt:      systemPrompt,
+		McpServers:        mapMcpServers(params.McpServers),
 	})
 	if err != nil {
 		return acp.NewSessionResponse{}, fmt.Errorf("failed to start Claude Code: %w", err)
